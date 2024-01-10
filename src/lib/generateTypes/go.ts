@@ -4,8 +4,9 @@ export default async function generatePyTypes(api) {
   const collections = await getCollections(api);
   let ret = "";
   const types = [];
-  
-  ret += `import (
+
+  ret += `package directus
+  import (
     "github.com/google/uuid"
     "time"
   )
@@ -19,9 +20,9 @@ export default async function generatePyTypes(api) {
         .join("");
       types.push(`${collectionName}: ${typeName}`);
       return `type ${typeName} struct {
-${Object.values(collection.fields).map((x) => `  ${x.field}: ${getType(x.type)}`).join("\n")}`;})
+${Object.values(collection.fields).map((x) => `  ${x.field[0].toUpperCase() + x.field.substring(1)} ${getType(x.type)} \`json:"${x.field}"\``).join("\n")}`;})
 .join("\n}\n\n");
-  ret += "\n\n";
+  ret += "\n}\n\n";
 
   return ret;
 }
@@ -35,8 +36,7 @@ function getType(directusType: string) {
   if (["integer"].includes(directusType)) return "int";
   if (["bigInteger"].includes(directusType)) return "int64";
 
-  if (["float"].includes(directusType)) return "float";
-  if (["decimal"].includes(directusType)) return "float64";
+  if (["float", "decimal"].includes(directusType)) return "float64";
   if (["boolean"].includes(directusType)) return "bool";
   if (["text", "string"].includes(directusType)) return "string";
 
