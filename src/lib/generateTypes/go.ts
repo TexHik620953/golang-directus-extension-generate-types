@@ -20,7 +20,7 @@ export default async function generatePyTypes(api) {
         .join("");
       types.push(`${collectionName}: ${typeName}`);
       return `type ${typeName} struct {
-${Object.values(collection.fields).map((x) => `  ${x.field[0].toUpperCase() + x.field.substring(1)} ${getType(x.type)} \`json:"${x.field}"\``).join("\n")}`;})
+${Object.values(collection.fields).map((x) => `  ${(x.field[0].toUpperCase() + x.field.substring(1)).replace(/_./g, (match) => match.charAt(1).toUpperCase())} ${getType(x.type)} \`json:"${x.field}"\``).join("\n")}`;})
 .join("\n}\n\n");
   ret += "\n}\n\n";
 
