@@ -29,12 +29,12 @@ ${Object.values(collection.fields).map((x) => `  ${(x.field[0].toUpperCase() + x
 
 function getType(directusType: string) {
   
-  if (["uuid"].includes(directusType)) return "uuid.UUID";
-  if (["timestamp"].includes(directusType)) return "time.Time";
+  if (["uuid"].includes(directusType)) return "*uuid.UUID";
+  if (["timestamp"].includes(directusType)) return "*time.Time";
   if (["json", "csv"].includes(directusType)) return "interface{}";
   
   if (["integer"].includes(directusType)) return "int";
-  if (["bigInteger"].includes(directusType)) return "int64";
+  if (["bigInteger"].includes(directusType)) return "string";
 
   if (["float", "decimal"].includes(directusType)) return "float64";
   if (["boolean"].includes(directusType)) return "bool";
