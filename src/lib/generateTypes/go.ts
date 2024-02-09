@@ -1,3 +1,4 @@
+import { Field } from "lib/types";
 import { getCollections } from "../api";
 
 export default async function generatePyTypes(api) {
@@ -7,6 +8,7 @@ export default async function generatePyTypes(api) {
 
   ret += `package directus
   import (
+    "encoding/json"
     "github.com/google/uuid"
     "time"
   )
@@ -14,34 +16,75 @@ export default async function generatePyTypes(api) {
 
   ret += Object.values(collections).map((collection) => {
       const collectionName = collection.collection;
-      const typeName = collectionName
-        .split("_")
-        .map((x) => x.charAt(0).toUpperCase() + x.slice(1))
-        .join("");
+      const typeName = pascalCase(collectionName);
       types.push(`${collectionName}: ${typeName}`);
-      return `type ${typeName} struct {
-${Object.values(collection.fields).map((x) => `  ${(x.field[0].toUpperCase() + x.field.substring(1)).replace(/_./g, (match) => match.charAt(1).toUpperCase())} ${getType(x.type)} \`json:"${x.field}"\``).join("\n")}`;})
-.join("\n}\n\n");
-  ret += "\n}\n\n";
+
+      let collectionFields = `\t${(Object.values(collection.fields).map((x:Field) => `${formatTypename(x.field)} ${getType(x)} \`json:"${x.field}"\``)).join("\n\t")}`;
+
+      let unmarshallString = 
+`func (cf *${typeName}) UnmarshalJSON(data []byte) error {
+	type ${typeName.toLowerCase()}_internal struct {
+    ${collectionFields}
+	}
+	if data[0] == '"' { //Data is a string
+		return json.Unmarshal(data, &cf.Id)
+	} else if data[0] == '{' { //Data is an object
+		var _obj ${typeName.toLowerCase()}_internal
+		err := json.Unmarshal(data, &_obj)
+		if err != nil {
+			return err
+		}
+    ${(Object.values(collection.fields).map((x:Field) => `cf.${formatTypename(x.field)} = _obj.${formatTypename(x.field)}`)).join("\n\t")}
+	} else {
+	  //Number or unkown, probably id
+	  return json.Unmarshal(data, &cf.Id)
+  }
+  return nil
+}
+`
+
+      let struct = `
+type ${typeName} struct {
+  ${collectionFields}
+}
+${collection.fields.some((p)=>p.field.toLowerCase()=="id")?unmarshallString:""}`;
+      return struct;
+  })
+.join("\n");
 
   return ret;
 }
+function formatTypename(typeName:string) {
+  return (typeName[0].toUpperCase() + typeName.substring(1)).replace(/_./g, (match) => match.charAt(1).toUpperCase());
+}
 
-function getType(directusType: string) {
-  
-  if (["uuid"].includes(directusType)) return "*uuid.UUID";
-  if (["timestamp"].includes(directusType)) return "*time.Time";
-  if (["json", "csv"].includes(directusType)) return "interface{}";
-  
-  if (["integer"].includes(directusType)) return "int";
-  if (["bigInteger"].includes(directusType)) return "string";
+function pascalCase(typeName:string) {
+  return typeName
+        .split("_")
+        .map((x) => x.charAt(0).toUpperCase() + x.slice(1))
+        .join("");
+}
 
-  if (["float", "decimal"].includes(directusType)) return "float64";
-  if (["boolean"].includes(directusType)) return "bool";
-  if (["text", "string"].includes(directusType)) return "string";
+function getType(field: Field) {
 
-  if (["alias"].includes(directusType)) return "interface{}";
-  if (["hash"].includes(directusType)) return "string";
-  
-  return "interface{}";
+  let type = "any";
+  if (["json", "csv", "alias"].includes(field.type)) type = "any";
+  if (["hash", "text", "string", "bigInteger"].includes(field.type)) type = "string";
+  if (["boolean"].includes(field.type)) type="bool";
+  if (["uuid"].includes(field.type)) type = "uuid.UUID";
+  if (["timestamp"].includes(field.type)) type = "time.Time";
+  if (["integer"].includes(field.type)) type = "int";
+  if (["float", "decimal"].includes(field.type)) type = "float64";
+
+  if (field.schema?.is_nullable && type != "any") {
+    type = "*" + type;
+  }
+  if (field.relation) {
+    if (field.relation.type === "many") {
+      return "[]" + pascalCase(field.relation.collection);
+    } else {
+      return "*" + pascalCase(field.relation.collection);
+    }
+  }
+  return type;
 }
