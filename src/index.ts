@@ -3,7 +3,8 @@ import IndexComponent from "./routes/index.vue";
 import TsComponent from "./routes/ts.vue";
 import OasComponent from "./routes/oas.vue";
 import PyComponent from "./routes/py.vue";
-import GoComponent from "./routes/go.vue";
+import GoTypesComponent from "./routes/go_types.vue";
+import GoApiComponent from "./routes/go_api.vue";
 import "prismjs";
 import "prismjs/themes/prism.css";
 import "prismjs/components/prism-clike";
@@ -38,8 +39,12 @@ export default {
       component: PyComponent,
     },
     {
-      path: "/generate-types/go",
-      component: GoComponent,
+      path: "/generate-types/gotypes",
+      component: GoTypesComponent,
+    },
+    {
+      path: "/generate-types/goapi",
+      component: GoApiComponent,
     },
   ],
   hidden: false,

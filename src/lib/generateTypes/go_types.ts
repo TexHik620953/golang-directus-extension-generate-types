@@ -1,7 +1,7 @@
 import { Collections, Field } from "lib/types";
 import { getCollections } from "../api";
 
-export default async function generatePyTypes(api) {
+export default async function generateGoTypes(api) {
   const collections = await getCollections(api);
   let ret = "";
 
@@ -16,6 +16,7 @@ export default async function generatePyTypes(api) {
     Diff(old IDirectusObject) map[string]interface{}
     Track() []IDirectusObject
     GetId() string
+    CollectionName() string
   }
 
   `
@@ -78,11 +79,15 @@ let diffString =
   let trackString = 
   `func (cf ${typeName}) Track() []IDirectusObject {
     trakingList := make([]IDirectusObject, 0)
-    trakingList = append(trakingList, &cf)
   
     ${(Object.values(collection.fields).map((x:Field) => getGoTrackString(x, typeName))).join("\n\t")}
     return trakingList
   }  
+`;
+
+let collectionNameFuncString = `func (cf ${typeName}) CollectionName() string {
+  return "${collection.collection}"
+}
 `;
 
 let idType = getGoType(collection.fields.find((p)=>p.field.toLowerCase()=="id"));
@@ -102,6 +107,7 @@ ${deepCopyString}
 ${diffString}
 ${trackString}
 ${getIdString}
+${collectionNameFuncString}
 `;
 return struct;
   })
@@ -182,6 +188,7 @@ function getGoTrackString(field:Field, typename:string):string {
       `;
     } else {
       return `if cf.${formatTypename(field.field)} != nil {
+        trakingList = append(trakingList, cf.${formatTypename(field.field)})
     trakingList = append(trakingList, cf.${formatTypename(field.field)}.Track()...)
   }`
     }

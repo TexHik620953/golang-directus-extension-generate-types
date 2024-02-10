@@ -13,7 +13,7 @@
   <script lang="ts">
   import NavbarComponent from "../components/navigation.vue";
   import CodeComponent from "../components/code.vue";
-  import generateGoTypes from "lib/generateTypes/go";
+  import generateGoApi from "lib/generateTypes/go_api";
   import languages from "lib/languages";
   
   export default {
@@ -26,7 +26,7 @@
       };
     },
     mounted() {
-        generateGoTypes(this.api).then((types) => (this.types = types));
+      generateGoApi(this.api).then((types) => (this.types = types));
     },
   };
   </script>
