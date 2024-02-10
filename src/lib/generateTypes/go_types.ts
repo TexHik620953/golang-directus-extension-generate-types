@@ -17,6 +17,7 @@ export default async function generateGoTypes(api) {
     Track() []IDirectusObject
     GetId() string
     CollectionName() string
+    Map() map[string]interface{}
   }
 
   `
@@ -73,8 +74,7 @@ let diffString =
 	  return json.Unmarshal(data, &cf.Id)
   }
   return nil
-}
-`
+}`
 
   let trackString = 
   `func (cf ${typeName}) Track() []IDirectusObject {
@@ -82,20 +82,29 @@ let diffString =
   
     ${(Object.values(collection.fields).map((x:Field) => getGoTrackString(x, typeName))).join("\n\t")}
     return trakingList
-  }  
-`;
+  }  `;
 
 let collectionNameFuncString = `func (cf ${typeName}) CollectionName() string {
   return "${collection.collection}"
-}
-`;
+}`;
 
 let idType = getGoType(collection.fields.find((p)=>p.field.toLowerCase()=="id"));
 
 let getIdString = `func (cf ${typeName}) GetId() string	{
   return ${getGoIdString(idType)}
-}
-`;
+}`;
+
+let mapString = `func (cf ${typeName}) Map() map[string]interface{} {
+  mp := make(map[string]interface{})
+
+  ${(Object.values(collection.fields).map((x:Field) => getGoMapString(x, typeName))).join("\n\t")}
+
+
+	if len(mp) == 0 {
+		return nil
+	}
+	return mp
+}`;
 
       let struct = 
 `type ${typeName} struct {
@@ -105,6 +114,7 @@ let getIdString = `func (cf ${typeName}) GetId() string	{
 ${unmarshallString}
 ${deepCopyString}
 ${diffString}
+${mapString}
 ${trackString}
 ${getIdString}
 ${collectionNameFuncString}
@@ -153,6 +163,14 @@ let goType = getGoType(field);
       diff["${field.field}"] = cf.${formatTypename(field.field)}
   }`;
 }
+
+function getGoMapString(field:Field, typeName:string):string {
+  if (field.relation) {
+    return "";
+  }
+  return `mp["${field.field}"] = cf.${formatTypename(field.field)}`;
+}
+
 function getGoDeepCopyString(field:Field):string {
   if (field.relation) {
     if (field.relation.type === "many") {

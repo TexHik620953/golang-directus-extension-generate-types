@@ -30,10 +30,13 @@ export default async function generateGoApi(api) {
 
   import (
     "fmt"
+    "log"
     "net/http"
     "net/url"
+    "os"
     "path"
     "strconv"
+    "time"
   
     "github.com/google/uuid"
   )
@@ -58,6 +61,9 @@ export default async function generateGoApi(api) {
   type DirectusApi struct {
     directusUrl *url.URL
     token       string
+
+    errLogger  *log.Logger
+    infoLogger *log.Logger
   
     trackingObjects map[IDirectusObject]trackingRef
 
@@ -65,7 +71,6 @@ export default async function generateGoApi(api) {
 
     collectionsAccessors map[string]IDirectusCollectionAccessor
   }
-  
   func New(addr, token string) (*DirectusApi, error) {
     u, err := url.Parse(addr)
     if err != nil {
@@ -75,6 +80,8 @@ export default async function generateGoApi(api) {
       directusUrl:     u,
       token:           token,
       trackingObjects: map[IDirectusObject]trackingRef{},
+      errLogger:       log.New(os.Stdout, "[DIRECTUS-API][ERROR]\\t", log.Ltime),
+      infoLogger:      log.New(os.Stdout, "[DIRECTUS-API][INFO]\\t", log.Ltime),
     }
     err = h.PingDirectus()
     if err != nil {
@@ -101,12 +108,14 @@ export default async function generateGoApi(api) {
     defer resp.Body.Close()
   
     if resp.StatusCode != http.StatusOK {
+      h.errLogger.Printf("Directus ping failed: %s\\n", err.Error())
       return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
     }
     return nil
   }
   
   func NewDirectusCollectionAccessor[K string | uuid.UUID | int, V IDirectusObject](api *DirectusApi, collectionName string) *DirectusCollectionAccessor[K, V] {
+    api.infoLogger.Printf("Created collection accessor for %s\\n", collectionName)
     return &DirectusCollectionAccessor[K, V]{
       api:            api,
       collectionName: collectionName,
@@ -119,10 +128,16 @@ export default async function generateGoApi(api) {
     for _, obj := range objects {
       _, exists := h.trackingObjects[obj]
       if !exists {
-        obj_copy := (obj).DeepCopy()
+        ownerCollection, exists := h.collectionsAccessors[obj.CollectionName()]
+        if !exists {
+          log.Fatalf("Collection accessor for object: %s not exists in map", obj.CollectionName())
+        }
+        h.infoLogger.Printf("Added tracking reference for object of type [%s]\\n", obj.CollectionName())
+        obj_copy := obj.DeepCopy()
         ref := trackingRef{
-          Original: obj_copy,
-          Actual:   obj,
+          Original:        obj_copy,
+          Actual:          obj,
+          OwnerCollection: ownerCollection,
         }
         h.trackingObjects[obj] = ref
       }
@@ -131,16 +146,22 @@ export default async function generateGoApi(api) {
   }
   
   func (h *DirectusApi) SaveChanges() error {
+    affectedObjects := 0
+    startTime := time.Now()
     for _, obj := range h.trackingObjects {
       diff := obj.delta()
       if diff != nil {
         cas := obj.OwnerCollection
         err := cas.patch(diff, obj.Original.GetId())
         if err != nil {
+          h.errLogger.Printf("Failed to save changes for object of type [%s]: %s\\n", obj.Original.CollectionName(), err.Error())
           return err
         }
+        affectedObjects++
       }
     }
+    deltaTime := time.Since(startTime)
+    h.infoLogger.Printf("Changes saved, affected [%d] objects, %s\\n", affectedObjects, deltaTime)
     return nil
   }
   
