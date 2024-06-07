@@ -29,14 +29,15 @@ export default async function generateGoApi(api) {
   let ret = `package directus
 
   import (
-    "fmt"
-    "log"
-    "net/http"
-    "net/url"
-    "os"
-    "path"
-    "strconv"
-    "time"
+	"fmt"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"path"
+	"strconv"
+	"sync"
+	"time"
   
     "github.com/google/uuid"
   )
@@ -64,8 +65,6 @@ export default async function generateGoApi(api) {
 
     errLogger  *log.Logger
     infoLogger *log.Logger
-  
-    trackingObjects map[IDirectusObject]trackingRef
 
     ${accessorsFields.join("\n\t")}
 
@@ -79,7 +78,6 @@ export default async function generateGoApi(api) {
     h := &DirectusApi{
       directusUrl:     u,
       token:           token,
-      trackingObjects: map[IDirectusObject]trackingRef{},
       errLogger:       log.New(os.Stdout, "[DIRECTUS-API][ERROR]\\t", log.Ltime),
       infoLogger:      log.New(os.Stdout, "[DIRECTUS-API][INFO]\\t", log.Ltime),
     }
@@ -121,50 +119,7 @@ export default async function generateGoApi(api) {
       collectionName: collectionName,
     }
   }
-  
-  func (h *DirectusApi) add2Track(val any) bool {
-    objects := val.(IDirectusObject).Track()
-    objects = append(objects, val.(IDirectusObject))
-    for _, obj := range objects {
-      _, exists := h.trackingObjects[obj]
-      if !exists {
-        ownerCollection, exists := h.collectionsAccessors[obj.CollectionName()]
-        if !exists {
-          log.Fatalf("Collection accessor for object: %s not exists in map", obj.CollectionName())
-        }
-        h.infoLogger.Printf("Added tracking reference for object of type [%s]\\n", obj.CollectionName())
-        obj_copy := obj.DeepCopy()
-        ref := trackingRef{
-          Original:        obj_copy,
-          Actual:          obj,
-          OwnerCollection: ownerCollection,
-        }
-        h.trackingObjects[obj] = ref
-      }
-    }
-    return false
-  }
-  
-  func (h *DirectusApi) SaveChanges() error {
-    affectedObjects := 0
-    startTime := time.Now()
-    for _, obj := range h.trackingObjects {
-      diff := obj.delta()
-      if diff != nil {
-        cas := obj.OwnerCollection
-        err := cas.patch(diff, obj.Original.GetId())
-        if err != nil {
-          h.errLogger.Printf("Failed to save changes for object of type [%s]: %s\\n", obj.Original.CollectionName(), err.Error())
-          return err
-        }
-        affectedObjects++
-      }
-    }
-    deltaTime := time.Since(startTime)
-    h.infoLogger.Printf("Changes saved, affected [%d] objects, %s\\n", affectedObjects, deltaTime)
-    return nil
-  }
-  
+
   func key2String[K string | uuid.UUID | int](key K) string {
     switch any(key).(type) {
     case string:
